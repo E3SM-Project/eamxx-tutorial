@@ -1,0 +1,108 @@
+\documentclass[8pt,NM,theme=angles,number=2023-00000]{sandia-beamer}
+
+%%%%%%%%%%%%%%%%%%%%%%
+%      Packages      %
+%%%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{ulem}
+\usepackage{amssymb}
+
+%%%%%%%%%%%%%%%%%%%%%%
+%  Style directives  %
+%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%
+%  Presention specs  %
+%%%%%%%%%%%%%%%%%%%%%%
+
+\title{Software engineering topics}
+\author{\centering{L.Bertagna}}
+\subtitle{EAMxx tutorial, E3SM All-Hands}
+\date{Denver, February 24th, 2025}
+
+%%%%%%%%%%%%%%%%%%%%%%%
+%%   Begin Document  %%
+%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+\begin{frame}
+  \maketitle
+\end{frame}
+
+\begin{frame}{Table of Contents}
+    \tableofcontents
+\end{frame}
+
+\section{Performance topics}
+\begin{frame}{Important design goals for HPC performance}
+  \begin{itemize}
+    \item [(P)] Expose all layers of parallelism in the algorithm
+    \item [(V)] Exploit vectorization when possibly
+    \item [(M)] Minimize memory movement/allocations
+  \end{itemize}
+
+  \vspace{1cm}
+  NOTE: some architectures are more sensitive than others to one of the P-V-M details:
+  \begin{itemize}
+    \item vectorization is mostly a CPU concern (at least when dealing with double precision)
+    \item exposing maximum parallelism is crucial for GPU (on CPU we "saturate" threads quickly)
+  \end{itemize}
+
+\end{frame}
+
+\subsection{Exposing parallelism}
+\begin{frame}[fragile]{Expose parallelism: a simple case}
+  \begin{semiverbatim} \small
+    \only<1>{
+      // Typical nested loops
+      for (int i=0; i<dim0; ++i) \{
+        for (int j=0; j<dim1; ++j) \{
+          for (int k=0; k<dim2; ++k) \{
+            output(i,j,k) = func(inputs(i,j,k));
+      \}\}\}
+    } \only<2>{
+      // Loops can be collapsed with index arithmetic
+      for (int idx=0; idx<dim0*dim1*dim2; ++idx) \{
+        int i = (idx / dim2) / dim1;
+        int j = (idx / dim2) % dim1;
+        int k =  idx % dim2;
+        output(i,j,k) = func(inputs(i,j,k));
+      \}
+    } \only<3>{
+      // Use RangePolicy for a single layer of parallelization
+      auto p = Kokkos::RangePolicy<ExecSpace>(0,dim0*dim1*dim2);
+      Kokkos::parallel_for(p,KOKKOS_LAMBDA(int idx)\{
+        int i = (idx / dim2) / dim1;
+        int j = (idx / dim2) % dim1;
+        int k =  idx % dim2;
+        output(i,j,k) = func(inputs(i,j,k));
+      \});
+    }
+  \end{semiverbatim}
+\end{frame}
+
+
+\begin{frame}[fragile]{Expose parallelism: a complex case}
+  \begin{semiverbatim} \small
+  for (int ie=0; ie<num_elements; ++ie) {
+    for (int idx=0; idx<NP*NP; ++idx) {
+      int i = idx / NP; int j = idx % NP;
+      double v0 = v(ie,0,i,j); double v1 = v(ie,1,i,j);
+      buf(0,i,j) = (J(0,0,i,j)*v0 + J(1,0,i,j)*v1)*metdet(i,j);
+      buf(1,i,j) = (J(0,1,i,j)*v0 + J(1,1,i,j)*v1)*metdet(i,j);
+    }
+    for (int idx=0; idx<NP*NP; ++idx) {
+      int i = idx / NP; int j = idx % NP;
+      double dudx = 0.0, dvdy = 0.0;
+      for (int k = 0; k < NP; ++k) {
+        dudx += D(j,k) * buf(0,i,k);
+        dvdy += D(i,k) * buf(1,k,j);
+      }
+      div(ie,i,j) = (dudx+dvdy) / (metdet(i,j)*rearth);
+    }
+  }
+  \end{semiverbatim}
+\end{frame}
+
+\end{document}
