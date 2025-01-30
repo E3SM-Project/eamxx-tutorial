@@ -14,18 +14,24 @@ PompeiEruption (const ekat::Comm& comm, const ekat::ParameterList& params)
 void PompeiEruption::
 set_grids (const std::shared_ptr<const GridsManager> grids_manager)
 {
-  using namespace ekat::units;
   using namespace ShortFieldTagsNames;
 
   // Some constants
   constexpr Real deg2rad = Constants<Real>::pi / 180;
   constexpr Real r_earth = Constants<Real>::r_earth;
 
+  constexpr auto Pa = ekat::units::Pa;
+  constexpr auto kg = ekat::units::kg;
+  constexpr auto s  = ekat::units::s;
+  constexpr auto nondim = ekat::units::Units::nondimensional;
+
   // Declare the fields we need as input and/or output
   auto grid = grids_manager->get_grid("Physics");
   auto layout = grid->get_3d_scalar_layout(true);
-  auto m3 = pow(m,3);
-  add_tracer<Updated>("ash",layout,1/m3,grid->name());
+  add_tracer<Updated>("ash",layout,kg/kg,grid->name());
+
+  // Needed to compute tracer mix ratio: mass_of_ash/mass_of_air
+  add_field<Reauired>("pseudo_density",layout,Pa,grid->name());
 
   // Number of columns/levels on this MPI rank
   int ncols = layout.dim(COL);
@@ -33,7 +39,7 @@ set_grids (const std::shared_ptr<const GridsManager> grids_manager)
 
   // We can create our helpe "mask" field. It will be 1 where the volcano injeciton
   // in the atmosphere happens, and 0 elsewhere.
-  FieldIdentifier rate_fid("emission_mask",layout,1/(m3*s),grid->name());
+  FieldIdentifier rate_fid("emission_mask",layout,nondim,grid->name());
   m_emission_mask = Field(rate_fid);
   m_emission_mask.allocate_view();
   m_emission_mask.deep_copy(0); // 0 means "not injecting here"
@@ -45,12 +51,10 @@ set_grids (const std::shared_ptr<const GridsManager> grids_manager)
   // Target location of volcanic eruption
   auto volcano_lat = 40.8214 * deg2rad;
   auto volcano_lon = 14.4260 * deg2rad;
-  auto radius = m_params.get<double>("plume_radius");
-  int emission_lev = m_params.get<int>("emission_level");
-  EKAT_REQUIRE_MSG (emission_lev>=0 and emission_lev<nlevs,
-      "Error! Emission level out of bounds.\n"
-      " - emission_lev: " << emission_lev << "\n"
-      " - grid num lev: " << nlevs << "\n");
+  auto emission_lev = 27;
+  auto radius = m_params.get<double>("plume_radius_in_km");
+  EKAT_REQUIRE_MSG (radius>0,
+      "Error! Plume radius should be positive. Input value: " << radius << ".\n");
 
   // Extract Kokkos (device) views from the fields
   // NOTE: views are "just" multi-dimensional arrays, which are accessible on device
@@ -90,15 +94,20 @@ void PompeiEruption::initialize_impl (const RunType /* run_type */)
 
 void PomepeiEruption::run_impl (const double dt)
 {
-  // Compute current emission rate
+  // Compute current emission rate and added mass
   // timestamp returns time at the *beginning* of the atm step.
   auto t = timestamp() + dt;
   auto rate = compute_emission_rate (t.days_from(m_eruption_date));
+  auto mass = dt*rate;
 
-  // Update the output field
+  // Update the output field: qash = (qash*rho + dt*injection_rate)/rho
+  auto qash = get_field_out("ash");
+  auto rho = get_field_in("pseudo_desnity");
+
   // y.update(x,a,b) means y = b*y + a*x
-  auto ash = get_field_out("ash");
-  ash.update(m_emission_mask,rate,1);
+  qash.scale(rho);
+  qash.update(m_emission_mask,mass,1);
+  qash.scale_inv(rho);
 }
 
 void PompeiEruption::finalize_impl ()
