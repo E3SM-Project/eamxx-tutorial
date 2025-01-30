@@ -52,7 +52,8 @@ set_grids (const std::shared_ptr<const GridsManager> grids_manager)
       " - emission_lev: " << emission_lev << "\n"
       " - grid num lev: " << nlevs << "\n");
 
-  // Extract (device) views from the fields
+  // Extract Kokkos (device) views from the fields
+  // NOTE: views are "just" multi-dimensional arrays, which are accessible on device
   auto emission_view = m_emission_mask.get_view<Real**>();
   auto lat_view = lat.get_view<const Real*>();
   auto lon_view = lon.get_view<const Real*>();
