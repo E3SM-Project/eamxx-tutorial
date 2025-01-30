@@ -25,7 +25,7 @@ set_grids (const std::shared_ptr<const GridsManager> grids_manager)
   auto grid = grids_manager->get_grid("Physics");
   auto layout = grid->get_3d_scalar_layout(true);
   auto m3 = pow(m,3);
-  add_field<Updated>("ash",layout,1/m3,grid->name());
+  add_tracer<Updated>("ash",layout,1/m3,grid->name());
 
   // Number of columns/levels on this MPI rank
   int ncols = layout.dim(COL);
