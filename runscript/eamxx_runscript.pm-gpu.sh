@@ -30,6 +30,9 @@ cd $SCRATCH/e3sm_scratch/EAMxx_Simulations/$CASE_NAME
 ./xmlchange REST_N=1
 ./xmlchange SCREAM_CMAKE_OPTIONS="SCREAM_NP 4 SCREAM_NUM_VERTICAL_LEV 128 SCREAM_NUM_TRACERS 10"
 
+# Special XML change to use the tutorial reservation.  Delete if doing a run on your own
+./xmlchange --subgroup case.run --append BATCH_COMMAND_FLAGS='--reservation=eamxx_tutorial'
+
 ./case.setup # -> create namelist_scream.xml
 
 cp ${SCREAMDOCS_ROOT}"/tutorial_output.yaml" .
