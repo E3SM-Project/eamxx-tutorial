@@ -1,17 +1,17 @@
 #!/bin/bash
 
 
-export CODE_ROOT=$HOME/Code/E3SM_Fork
+export CODE_ROOT=$HOME/Code/E3SM
+export TUTORIAL_ROOT=$HOME/Code/eamxx-tutorial-2025
 export COMPSET=F2010-SCREAMv1
 export RES=ne4pg2_ne4pg2
 export PECOUNT=4x1
-export CASE_NAME=${COMPSET}.${RES}.${PECOUNT}.radtest.gpu
+export CASE_NAME=${COMPSET}.${RES}.${PECOUNT}.tutorial.gpu
 export QUEUE=debug
 export WALLTIME=00:30:00
 export COMPILER=gnugpu
 export MACHINE=pm-gpu
 
-readonly SCREAMDOCS_ROOT="$CODE_ROOT/components/eamxx/src/physics/tutorial/yaml_output_files"
 
 #----------------------
 mkdir $SCRATCH/e3sm_scratch/EAMxx_Simulations
@@ -35,7 +35,7 @@ cd $SCRATCH/e3sm_scratch/EAMxx_Simulations/$CASE_NAME
 
 ./case.setup # -> create namelist_scream.xml
 
-cp ${SCREAMDOCS_ROOT}"/tutorial_output.yaml" .
+cp ${TUTORIAL_ROOT}"/runscript/tutorial_output.yaml" .
 ./atmchange output_yaml_files="./tutorial_output.yaml"
 
 ./case.setup # -> create namelist_scream.xml
