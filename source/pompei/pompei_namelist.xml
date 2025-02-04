@@ -1,0 +1,5 @@
+    <!-- POMPEI  -->
+    <pompei inherit="atm_proc_base" >
+      <eruption_date type="string" doc="Date of volcanic eruption start"></eruption_date>
+    </pompei>
+
