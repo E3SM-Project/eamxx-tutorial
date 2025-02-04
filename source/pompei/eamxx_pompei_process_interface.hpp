@@ -6,6 +6,7 @@
 namespace scream
 {
 
+// Practicing On Manually Programming EAMxx Interfaces (POMPEI)
 // Inject a tracer (e.g. ash) in the atmosphere
 
 class PompeiEruption : public AtmosphereProcess
