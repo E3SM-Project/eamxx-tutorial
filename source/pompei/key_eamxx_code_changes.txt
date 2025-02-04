@@ -1,0 +1,22 @@
+# Instructions for EAMxx codebase:
+# let TUTORIAL_ROOT be where the eamxx-tutorial-2025 code is located.
+
+# Add the following line to $CODE/components/eamxx/src/physics/CMakeLists.txt
+ 
+add_subdirectory($TUTORIAL_ROOT/source/pompei pompei)
+
+
+# Add the following snippet of code to
+# $TUTORIAL_ROOT/components/eamxx/cime_config/namelist_defaults_scream.xml
+
+    <!-- POMPEI  -->
+    <pompei inherit="atm_proc_base" >
+      <eruption_date type="string" doc="Date of volcanic eruption start"></eruption_date>
+    </pompei>
+
+# Add the following lines to
+# $TUTORIAL_ROOT/components/eamxx/src/physics/register_physics.hpp 
+
+#ifdef EAMXX_HAS_POMPEI
+  proc_factory.register_product("pompei",&create_atmosphere_process<PompeiEruption>);
+#endif 
