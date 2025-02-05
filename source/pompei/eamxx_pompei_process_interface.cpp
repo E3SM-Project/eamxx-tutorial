@@ -125,7 +125,7 @@ void PompeiEruption::run_impl (const double dt)
   // y.update(x,a,b) means y = b*y + a*x
   qash.scale(rho);
   qash.update(m_emission_mask,mass,1.0);
-//  qash.scale_inv(rho);
+  qash.scale_inv(rho);
 }
 
 /*-----------------------------------------------------------------------------------------------*/
