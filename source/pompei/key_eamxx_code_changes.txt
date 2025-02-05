@@ -1,22 +1,37 @@
 # Instructions for EAMxx codebase:
 # let TUTORIAL_ROOT be where the eamxx-tutorial-2025 code is located.
+# let CODE_ROOT be where the E3SM code is located
 
-# Add the following line to $CODE/components/eamxx/src/physics/CMakeLists.txt
+# Add the following line to $CODE_ROOT/components/eamxx/src/physics/CMakeLists.txt
  
 add_subdirectory($TUTORIAL_ROOT/source/pompei pompei)
 
-
 # Add the following snippet of code to
-# $TUTORIAL_ROOT/components/eamxx/cime_config/namelist_defaults_scream.xml
+# $CODE_ROOT/components/eamxx/cime_config/namelist_defaults_scream.xml
 
     <!-- POMPEI  -->
     <pompei inherit="atm_proc_base" >
       <eruption_date type="string" doc="Date of volcanic eruption start"></eruption_date>
+      <plume_radius_in_km type="real" doc="Radius in km of plume generation"></plume_radius_in_km>
     </pompei>
 
-# Add the following lines to
-# $TUTORIAL_ROOT/components/eamxx/src/physics/register_physics.hpp 
+# Add the following two snippets to
+# $CODE_ROOT/components/eamxx/src/physics/register_physics.hpp 
+
+#ifdef EAMXX_HAS_POMPEI
+#include "$TUTORIAL_ROOT/source/pompei/eamxx_pompei_process_interface.hpp"
+#endif
 
 #ifdef EAMXX_HAS_POMPEI
   proc_factory.register_product("pompei",&create_atmosphere_process<PompeiEruption>);
 #endif 
+
+# Add "pompei" as a library in 
+# $CODE_ROOT/components/eamxx/src/mct_coupling/CMakeLists.txt
+
+# Add the following lines to the runscript
+
+./atmchange mac_aero_mic::atm_procs_list+=pompei
+./atmchange atmosphere_processes::physics::mac_aero_mic::pompei::eruption_date="0001-01-01-07200"
+
+# Update the runscript to have 11 SCREAM_NUM_TRACERS instead of 10
