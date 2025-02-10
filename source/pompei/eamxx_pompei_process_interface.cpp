@@ -83,7 +83,7 @@ set_grids (const std::shared_ptr<const GridsManager> grids_manager)
     auto delta_lat = lat_rad - volcano_lat;
     auto delta_lon = lon_rad - volcano_lon;
 
-    auto dist = r_earth * sqrt(delta_lat*delta_lat + delta_lon*delta_lon);
+    auto dist = r_earth/1e3 * sqrt(delta_lat*delta_lat + delta_lon*delta_lon);
 
     // If the distance between this point and the center of the volcano is within the radius
     // set the MASK value to 1 (true).
