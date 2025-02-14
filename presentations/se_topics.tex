@@ -11,11 +11,13 @@
 %  Style directives  %
 %%%%%%%%%%%%%%%%%%%%%%
 
+\definecolor{lightlightgray}{rgb}{0.9, 0.9, 0.9}
+
 %%%%%%%%%%%%%%%%%%%%%%
 %  Presention specs  %
 %%%%%%%%%%%%%%%%%%%%%%
 
-\title{Software engineering topics}
+\title{EAMxx software engineering topics}
 \author{\centering{L.Bertagna}}
 \subtitle{EAMxx tutorial, E3SM All-Hands}
 \date{Denver, February 24th, 2025}
@@ -78,31 +80,243 @@
         int k =  idx % dim2;
         output(i,j,k) = func(inputs(i,j,k));
       \});
+    } \only<4>{
+      // Use MDRangePolicy for an easier to read syntax
+      // (but may need care with tiling)
+      using Right = Kokkos::Iterate::Right;
+      using Rank = Kokkos::Rank<3,Right,Right>;
+      using MDRange = Kokkos::MDRangePolicy<ExecSpace,Rank>;
+      auto p = MDRange(\{0,0,0\},\{dim0,dim1,dim2\});
+      Kokkos::parallel_for(p,KOKKOS_LAMBDA(int i, int j, int k)\{
+        output(i,j,k) = func(inputs(i,j,k));
+      \});
     }
   \end{semiverbatim}
 \end{frame}
 
-
 \begin{frame}[fragile]{Expose parallelism: a complex case}
+  \vspace{-0.5cm}
   \begin{semiverbatim} \small
-  for (int ie=0; ie<num_elements; ++ie) {
-    for (int idx=0; idx<NP*NP; ++idx) {
+  for (int ie=0; ie<num_elements; ++ie) \{
+    for (int idx=0; idx<NP*NP; ++idx) \{
       int i = idx / NP; int j = idx % NP;
       double v0 = v(ie,0,i,j); double v1 = v(ie,1,i,j);
       buf(0,i,j) = (J(0,0,i,j)*v0 + J(1,0,i,j)*v1)*metdet(i,j);
       buf(1,i,j) = (J(0,1,i,j)*v0 + J(1,1,i,j)*v1)*metdet(i,j);
-    }
-    for (int idx=0; idx<NP*NP; ++idx) {
+    \}
+    for (int idx=0; idx<NP*NP; ++idx) \{
       int i = idx / NP; int j = idx % NP;
       double dudx = 0.0, dvdy = 0.0;
-      for (int k = 0; k < NP; ++k) {
+      for (int k = 0; k < NP; ++k) \{
         dudx += D(j,k) * buf(0,i,k);
         dvdy += D(i,k) * buf(1,k,j);
-      }
+      \}
       div(ie,i,j) = (dudx+dvdy) / (metdet(i,j)*rearth);
-    }
-  }
+    \}
+  \}
   \end{semiverbatim}
+\end{frame}
+
+\begin{frame}[fragile]{Expose parallelism: a complex case}
+
+  \vspace{-0.9cm}
+  \begin{semiverbatim} \small
+  auto p = Kokkos::TeamPolicy<ExecSpace>(num_elements,NP*NP);
+  Kokkos::parallel_for(p,KOKKOS_LAMBDA (const auto& team) \{
+    int ie = team.league_rank();
+    Kokkos::parallel_for(Kokkos::TeamVectorRange(team,NP*NP),[&] \{
+      int i = idx / NP; int j = idx % NP;
+      double v0 = v(ie,0,i,j); double v1 = v(ie,1,i,j);
+      buf(0,i,j) = (J(0,0,i,j)*v0 + J(1,0,i,j)*v1)*metdet(i,j);
+      buf(1,i,j) = (J(0,1,i,j)*v0 + J(1,1,i,j)*v1)*metdet(i,j);
+    \});
+    team.team_barrier(); // <- Wait for all team threads to finish
+    Kokkos::parallel_for(Kokkos::TeamVectorRange(team,NP*NP),[&] \{
+      int i = idx / NP; int j = idx % NP; double dudx = 0.0, dvdy = 0.0;
+      for (int k = 0; k < NP; ++k) \{
+        dudx += D(j,k) * buf(0,i,k);
+        dvdy += D(i,k) * buf(1,k,j);
+      \}
+      div(ie,i,j) = (dudx+dvdy) / (metdet(i,j)*rearth);
+    \});
+  \});
+  \end{semiverbatim}
+\end{frame}
+
+\subsection{Vectorization}
+\begin{frame}{Vectorization: simd-like structures}
+  \begin{itemize}
+    \item While GPUs may be reigning in the HPC world, there are plenty of CPU platform to use for good science
+    \item Vectorization is the best way to squeeze flops/Watt on CPU (if algorithms allow SIMD)
+    \item C++ does not auto-vectorize as well as Fortran (which has array structure baked in their arrays)
+    \item Key to vectorization: give as many hints as possible to the compiler
+    \item EKAT implements a "Pack" struct, which informs compiler via 1) compile-time length of array, and
+          2) CPP directives.
+    \item Host code should remain agnostic w.r.t. scalar type (where possible)
+    \item Mask-like objects and "selectors" are provided in EKAT
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Vectorization: simd-like structures}
+  Consider this imaginary loop over column levels.
+
+  \vspace{-0.5cm}
+  \begin{semiverbatim} \small
+  using v_t = View<Real*>;
+  using cv_t = View<const Real*>;
+  void f (int nlevs, cv_t T, cv_t dp, cv_t pmid, cv_t qv, v_t out, v_t out2) \{
+    const Real gamma = 1.4;
+    for (int k=0; k<nlevs; ++k) \{
+      Real e = pow(pmid(k)/p0, gamma/(gamma-1));
+      if (T(k)>300) \{
+        Real q = qv(k) / dp(k);
+        out(k) = q(k)*e;
+      \}
+      out2(k) = e*T(k);
+    \}
+  \}
+  \end{semiverbatim}
+
+  \vspace{-0.5cm}
+  Levels are indep of each other, so we want to vectorize.
+\end{frame}
+
+\begin{frame}[fragile]{Vectorization: simd-like structures}
+  Explicitly using EKAT's Pack structure, with pack-length 16
+
+  \vspace{-0.5cm}
+  \begin{semiverbatim} \small
+  using Pack = ekat::Pack<Real,16>;
+  using VT = View<Pack*>;
+  using CVT = View<const Pack*>;
+  void f (int nlevs, CVT T, CVT dp, CVT pmid, CVT qv, VT out, VT out2) \{
+    const Real gamma = 1.4;
+    int npacks = (nlevs + 16 -1) / 16; // We have a utility for this..
+    for (int k=0; k<npacks; ++lev) \{
+      auto e = pow(pmid(k)/p0, gamma/(gamma-1));
+      auto mask = T(k) > 300;
+      if (mask.any()) \{
+        Real q = qv(k) / dp(k);
+        out(k).set(mask,q(k)*e);
+      \}
+      out2(k) = e*T(k);
+    \}
+  \}
+  \end{semiverbatim}
+\end{frame}
+
+\begin{frame}[fragile]{Vectorization: simd-like structures}
+  Agnostic treatment of scalar type
+
+  \vspace{-0.5cm}
+  \begin{semiverbatim} \small
+  template<typename T> using VT = View<T*>;
+  template<typename T> using CVT = View<const T*>;
+  template<typename T>
+  void f (CVT<T> T, CVT<T> dp, CVT<T> pmid, CVT<T> qv, VT<T> out, VT<T> out2) \{
+    const Real gamma = 1.4;
+    int len = T.size();
+    for (int k=0; k<npacks; ++lev) \{
+      auto e = pow(pmid(k)/p0, gamma/(gamma-1));
+      auto mask = T(k) > 300;
+      where(mask, out(k)) = qv(k) / dp(k); // works for Pack and Real
+      out2(k) = e*T(k);
+    \}
+  \}
+  \end{semiverbatim}
+\end{frame}
+
+\subsection{Memory management}
+\begin{frame}[fragile]{Memory management: minimal scratch pads}
+  \begin{itemize}
+    \item Stack temporaries inside kernels may significantly increas register pressure
+    \item The same temporary may be used by multiple threads, but stack vars are thread locals
+    \item Allocating views at runtime can hurt performance, so we need to pre-allocate temporary views.
+    \item Two kind of temporaries:
+      \begin{itemize}
+        \item persistent across kernels: eamxx can provide a "shared" scratch mem pointer to all atmosphere
+              processes, which can store it in unmanaged views for runtime usage.
+              The *same* memory is used by all processes, so cannot rely on its values at run\_impl entry.
+        \item local to a single kernel: use a WorkspaceManager (WSM) to minimize the number of local memory
+              used *within* a kernel that uses TeamPolicy.
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Memory management: minimal scratch pads}
+  \vspace{-0.5cm}
+  \begin{semiverbatim} \small
+    WorkspaceMgr wsm(nlevs,num_slots,policy);
+    Kokkos::parallel_for(policy, KOKKOS_LAMBDA (const auto& team) \{
+      const int icol = team.league_rank();
+      auto ws = wsm.get_workspace(team);
+      auto pmid = ws.take("pmid");
+      auto pint = ws.take("pint");
+      auto dp = ekat::subview(dp_view,icol);
+
+      ColOps::column_scan<true>(team,nlevs,dp,pint,p0);
+      team.team_barrier();
+      ColOps::compute_midpoint_values(team,nlevs,pint,pmid);
+      team.team_barrier();
+      ... // Use pmid/pint inside other stuff
+      ws.release (pmid);  // Release mem. Done automatically at
+      ws.release (pint);  // ws destruction anyways...
+    )\};
+  \end{semiverbatim}
+\end{frame}
+
+\section{General purpose utilities}
+\begin{frame}{Overview of EAMxx/EKAT general utilities}
+  In EKAT and EAMxx we provide utilities to hide away impl of certain common ops.
+  \begin{itemize}
+    \item Subview manipulation
+    \item Scan/reduction of 1d views
+    \item Kernel scratch memory (Workspace Manager)
+    \item Horizontal and vertical remap of data
+    \item Data interpolation from time-series form files
+    \item Common physics functions (e.g., exner, virtual/pot temperature, dry<->wet conversion...)
+    \item Field objects manipulation
+    \item Diagnostic output calculation (e.g., fields at certain pressure, field vertical integral, etc)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Column operations}
+  Inside a kernel with Team policy
+  \begin{semiverbatim} \small
+      auto dp = ekat::subview(dp_view,icol);
+      auto qv = ekat::subview(qv_view,icol);
+      auto ql = ekat::subview(ql_view,icol);
+      auto mass = ekat::view_reduction(team,0,nlevs,dp);
+      auto w_mass = ekat::view_reduction(team,0,nlevs,[&](int k) \{
+        return qv(k)*dp(k) + ql(k)*dp(k);
+      \});
+
+      // Or
+      ColOps::column_scan<true>(team,nlevs,dp,pint,p0);
+      team.team_barrier();
+      ColOps::compute_midpoint_values(team,nlevs,pint,pmid);
+      team.team_barrier();
+  \end{semiverbatim}
+\end{frame}
+
+\begin{frame}[fragile]{Field manipulation}
+  From inside the \colorbox{lightlightgray}{\texttt{run\_impl}} method of an atm process
+  \begin{semiverbatim} \small
+    auto f1 = get_field_in ("f1");
+    auto f2 = get_field_in ("f2");
+    auto f3 = get_field_out ("f3");
+    auto f4 = get_field_out ("f4");
+    f3.update(f1,2,3); // f3 = 3*f3+2*f1;
+    f4.deep_copy(f1);  // f4 = f1;
+    f4.max(f2);        // f4 = max(f4,f2);
+    f4.scale(f1);      // f4 = f4*f1
+    f4.inv_scale(f2);  // f4 = f4 / f1
+    f3.update<Multiply>(f4,2,1);  // f3 = 2*f3*f4
+  \end{semiverbatim}
+
+  \vspace{-0.5cm}
+  The catch: so far, all these function operate on a *scalar* view, that is,
+  they don't take advantage of simd opportunity on CPU.
 \end{frame}
 
 \end{document}
