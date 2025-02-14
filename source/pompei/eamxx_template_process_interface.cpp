@@ -25,7 +25,7 @@ AP_TEMPLATE::AP_TEMPLATE (const ekat::Comm& comm, const ekat::ParameterList& par
   // which is of type X.  
   //
   // ex:
-  // m_Y = params.get<X>("Y");
+  m_Y = params.get<X>("Y");
 }
 
 /*-----------------------------------------------------------------------------------------------
@@ -51,11 +51,11 @@ set_grids (const std::shared_ptr<const GridsManager> grids_manager)
   //
   // to set the units.  These can be found from ekat::units::Units
   // For example,
-  //   constexpr auto nondim = ekat::units::Units::nondimensional();
+  constexpr auto nondim = ekat::units::Units::nondimensional();
   // 
   // to set the layout, which is how the field is configured in space
   // For example,
-  //   const auto layout = m_grid->get_3d_scalar_layout(true);
+  const auto layout_3d = m_grid->get_3d_scalar_layout(true);
 
   // We can now add all fields used by this process and designate how they will be used,
   // The format for declaring a field is:
@@ -69,12 +69,20 @@ set_grids (const std::shared_ptr<const GridsManager> grids_manager)
   //   LAYOUT is the physical layout of the field on the grid, e.g. 2D, 3D.  See layout example above.
   //   UNITS are the units of the field, see units example above
   //   GRID_NAME is the name of the grid this process is run on, typically "m_grid->name()"
-  //
   //   *Note, there is a special add_field call for tracers which has a different signature.  The format is,
   //     add_tracer<MODE>(NAME,GRID,UNITS)
   //   where,
   //     NAME and UNITS are as above
   //     GRID is the actual grid, typically "m_grid"
+  
+  // Required Fields
+  add_field<Required>("p_mid",layout_3d,Pa,m_grid->name());
+  // Computed Fields
+  add_field<Computed>("my_cool_variable",layout_3d,nondim,m_grid->name());
+  // Updated Fields
+  add_field<Updated>("T_mid",layout_3d,K,m_grid->name());
+  // Tracer Fields (advected by dynamics)
+  add_tracer<Required>("qv",m_grid,kg/kg);
 
 }
 
