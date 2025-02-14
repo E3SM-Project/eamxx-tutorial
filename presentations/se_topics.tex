@@ -246,18 +246,18 @@
 \begin{frame}[fragile]{Memory management: minimal scratch pads}
   \vspace{-0.5cm}
   \begin{semiverbatim} \small
-    WorkspaceMgr wsm(nlevs,num_slots,policy);
-    Kokkos::parallel_for(policy, KOKKOS_LAMBDA (const auto& team) \{
-      const int icol = team.league_rank();
-      auto ws = wsm.get_workspace(team);
+    WorkspaceMgr wsm(nlevs,num\_slots,policy);
+    Kokkos::parallel\_for(policy, KOKKOS\_LAMBDA (const auto& team) \{
+      const int icol = team.league\_rank();
+      auto ws = wsm.get\_workspace(team);
       auto pmid = ws.take("pmid");
       auto pint = ws.take("pint");
-      auto dp = ekat::subview(dp_view,icol);
+      auto dp = ekat::subview(dp\_view,icol);
 
-      ColOps::column_scan<true>(team,nlevs,dp,pint,p0);
-      team.team_barrier();
-      ColOps::compute_midpoint_values(team,nlevs,pint,pmid);
-      team.team_barrier();
+      ColOps::column\_scan<true>(team,nlevs,dp,pint,p0);
+      team.team\_barrier();
+      ColOps::compute\_midpoint\_values(team,nlevs,pint,pmid);
+      team.team\_barrier();
       ... // Use pmid/pint inside other stuff
       ws.release (pmid);  // Release mem. Done automatically at
       ws.release (pint);  // ws destruction anyways...
@@ -283,40 +283,64 @@
 \begin{frame}[fragile]{Column operations}
   Inside a kernel with Team policy
   \begin{semiverbatim} \small
-      auto dp = ekat::subview(dp_view,icol);
-      auto qv = ekat::subview(qv_view,icol);
-      auto ql = ekat::subview(ql_view,icol);
-      auto mass = ekat::view_reduction(team,0,nlevs,dp);
-      auto w_mass = ekat::view_reduction(team,0,nlevs,[&](int k) \{
+      auto dp = ekat::subview(dp\_view,icol);
+      auto qv = ekat::subview(qv\_view,icol);
+      auto ql = ekat::subview(ql\_view,icol);
+      auto mass = ekat::view\_reduction(team,0,nlevs,dp);
+      auto w\_mass = ekat::view\_reduction(team,0,nlevs,[&](int k) \{
         return qv(k)*dp(k) + ql(k)*dp(k);
       \});
 
       // Or
-      ColOps::column_scan<true>(team,nlevs,dp,pint,p0);
-      team.team_barrier();
-      ColOps::compute_midpoint_values(team,nlevs,pint,pmid);
-      team.team_barrier();
+      ColOps::column\_scan<true>(team,nlevs,dp,pint,p0);
+      team.team\_barrier();
+      ColOps::compute\_midpoint\_values(team,nlevs,pint,pmid);
+      team.team\_barrier();
   \end{semiverbatim}
 \end{frame}
 
 \begin{frame}[fragile]{Field manipulation}
-  From inside the \colorbox{lightlightgray}{\texttt{run\_impl}} method of an atm process
+  If \texttt{f1, f2} are field objects
+
+  \vspace{-0.5cm}
   \begin{semiverbatim} \small
-    auto f1 = get_field_in ("f1");
-    auto f2 = get_field_in ("f2");
-    auto f3 = get_field_out ("f3");
-    auto f4 = get_field_out ("f4");
-    f3.update(f1,2,3); // f3 = 3*f3+2*f1;
-    f4.deep_copy(f1);  // f4 = f1;
-    f4.max(f2);        // f4 = max(f4,f2);
-    f4.scale(f1);      // f4 = f4*f1
-    f4.inv_scale(f2);  // f4 = f4 / f1
-    f3.update<Multiply>(f4,2,1);  // f3 = 2*f3*f4
+    f2.update(f1,2,3);              // f2 = 3*f2+2*f1;
+    f2.update<Multiply>(f1,2,1);    // f2 = 2*f2*f1
+    f2.update<Divide,Host>(f1,2,1); // f2 = f2/(2*f1), but on Host view
+    f2.scale(f1);                   // same as f2.update<Multiply>(f1,1,1)
+    f2.inv\_scale(f1);              // same as f2.update<Divide>(f1,1,1)
+    f2.max(f1);                     // same as f2.update<Max>(f1,1,1)
+    f2.deep\_copy(f1);              // same as f2.update<Replace>(f1,1,*)
   \end{semiverbatim}
 
   \vspace{-0.5cm}
-  The catch: so far, all these function operate on a *scalar* view, that is,
-  they don't take advantage of simd opportunity on CPU.
+  \begin{itemize}
+    \item Functions operate on a *scalar* view (no SIMD)
+    \item By default, functions operate on Device view
+    \item Valid combine modes: \texttt{Update, Multiply, Divide, Replace, Max, Min}
+    \item Default combine mode: \texttt{Update}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Field manipulation}
+  If \texttt{f\_i,g\_i,w\_i} are field objects with layouts
+
+  \begin{itemize}
+    \item \texttt{i=1: (nlevs)} 
+    \item \texttt{i=2: (ncols)} 
+    \item \texttt{i=3: (ncols,nlevs)} 
+  \end{itemize}
+
+  \vspace{-0.5cm}
+  \begin{semiverbatim} \small
+    vertical\_contraction(f\_2,g\_3,w\_1); // f\_2(i) = sum\_k(g\_3(i,k)*w\_1(k))
+    vertical\_contraction(f\_2,g\_3,w\_3); // f\_2(i) = sum\_k(g\_3(i,k)*w\_1(i,k))
+    horiz\_contraction(f\_1,g\_3,w\_2,comm); // f\_1(k) = sum\_i(g\_3(i,k)*w\_2(i))
+    auto max = field\_max(f\_i,comm);
+    auto norm = frob\_norm(f\_i,comm);
+  \end{semiverbatim}
+  Last two compute the field max and Frobenius norm across all entries of the field, across all MPI ranks.
+
 \end{frame}
 
 \end{document}
