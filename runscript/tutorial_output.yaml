@@ -8,7 +8,7 @@ Fields:
   Physics PG2:
     Field Names:
     #3D vars
-    - ash
+    #    - ash
     - T_mid
     - qv
     - RelativeHumidity

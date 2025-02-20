@@ -4,9 +4,9 @@
 export CODE_ROOT=$HOME/Code/E3SM
 export TUTORIAL_ROOT=$HOME/Code/eamxx-tutorial-2025
 export COMPSET=F2010-SCREAMv1
-export RES=ne4pg2_ne4pg2
+export RES=ne30pg2_ne30pg2
 export PECOUNT=4x1
-export CASE_NAME=${COMPSET}.${RES}.${PECOUNT}.tutorial.gpu
+export CASE_NAME=${COMPSET}.${RES}.${PECOUNT}.pompei.gpu
 export QUEUE=debug
 export WALLTIME=00:30:00
 export COMPILER=gnugpu
@@ -23,15 +23,15 @@ ${CODE_ROOT}/cime/scripts/create_newcase --case ${CASE_NAME} --compset ${COMPSET
 cd $SCRATCH/e3sm_scratch/EAMxx_Simulations/$CASE_NAME
 
 ./xmlchange STOP_OPTION=ndays #how long to run for
-./xmlchange STOP_N=1
+./xmlchange STOP_N=10
 ./xmlchange HIST_OPTION=never #how often to write cpl.hi files
 ./xmlchange HIST_N=5
 ./xmlchange REST_OPTION=ndays
-./xmlchange REST_N=1
+./xmlchange REST_N=10
 ./xmlchange SCREAM_CMAKE_OPTIONS="SCREAM_NP 4 SCREAM_NUM_VERTICAL_LEV 128 SCREAM_NUM_TRACERS 10"
 
 # Special XML change to use the tutorial reservation.  Delete if doing a run on your own
-./xmlchange --subgroup case.run --append BATCH_COMMAND_FLAGS='--reservation=eamxx_tutorial'
+#./xmlchange --subgroup case.run --append BATCH_COMMAND_FLAGS='--reservation=eamxx_tutorial'
 
 ./case.setup # -> create namelist_scream.xml
 
