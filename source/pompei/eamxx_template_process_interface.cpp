@@ -122,7 +122,7 @@ void AP_TEMPLATE::run_impl (const double dt)
  * In most cases this is left blank, as EAMxx takes care of most finalization steps.
  * But just in case a process has specific needs the option is available.
  */
-void AP_TEMPLATE:finalize_impl ()
+void AP_TEMPLATE::finalize_impl ()
 {
   // Usually blank
 }
